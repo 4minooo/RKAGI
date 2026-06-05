@@ -2,7 +2,28 @@ const ROOM_PATH = "alkkagiRooms";
 const CLIENT_ID =
   globalThis.crypto?.randomUUID?.() || `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-const makeRoomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+const makeRoomCode = () => String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
+
+function normalizeRoomCode(code) {
+  return code.replace(/\D/g, "").slice(0, 6);
+}
+
+function normalizePlayers(players) {
+  return [
+    players?.[0] || players?.["0"] || "흑",
+    players?.[1] || players?.["1"] || "상대 대기 중",
+  ];
+}
+
+function normalizeStones(stones) {
+  if (Array.isArray(stones)) {
+    return stones;
+  }
+
+  return Object.keys(stones || {})
+    .sort((a, b) => Number(a) - Number(b))
+    .map((key) => stones[key]);
+}
 
 export async function createFirebaseBridge({ onRemoteState, getState, setStatus }) {
   const config = window.ALKKAGI_FIREBASE_CONFIG;
@@ -18,6 +39,7 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
       joinRoom: async () => {
         throw new Error("Firebase 설정이 없습니다.");
       },
+      leaveRoom: () => {},
       publish: () => {},
       isLocalTurn: () => true,
     };
@@ -50,8 +72,29 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
     });
   }
 
+  function leaveRoom() {
+    if (unsubscribe) {
+      unsubscribe();
+    }
+    unsubscribe = null;
+    roomCode = "";
+    playerSlot = null;
+    lastPublish = 0;
+  }
+
   async function createRoom() {
-    roomCode = makeRoomCode();
+    let nextRoomCode = makeRoomCode();
+    let guard = 0;
+    while ((await dbModule.get(roomRef(nextRoomCode))).exists() && guard < 8) {
+      nextRoomCode = makeRoomCode();
+      guard += 1;
+    }
+
+    if (guard >= 8) {
+      throw new Error("방 코드 생성에 실패했습니다. 다시 시도하세요.");
+    }
+
+    roomCode = nextRoomCode;
     playerSlot = 0;
     const state = { ...getState(), updatedBy: CLIENT_ID, updatedAt: Date.now() };
     await dbModule.set(roomRef(roomCode), {
@@ -64,10 +107,10 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
     return { roomCode, playerSlot };
   }
 
-  async function joinRoom(code) {
-    const normalized = code.trim().toUpperCase();
-    if (!normalized) {
-      throw new Error("방 코드를 입력하세요.");
+  async function joinRoom(code, { playerName } = {}) {
+    const normalized = normalizeRoomCode(code);
+    if (normalized.length !== 6) {
+      throw new Error("방 코드는 숫자 6자리입니다.");
     }
 
     const snapshot = await dbModule.get(roomRef(normalized));
@@ -75,15 +118,40 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
       throw new Error("방을 찾을 수 없습니다.");
     }
 
+    const room = snapshot.val();
+    const blackClientId = room.players?.black;
+    if (blackClientId === CLIENT_ID) {
+      throw new Error("이미 내가 만든 방입니다.");
+    }
+    if (room.players?.white && room.players.white !== CLIENT_ID) {
+      throw new Error("이미 두 명이 입장한 방입니다.");
+    }
+
     roomCode = normalized;
     playerSlot = 1;
+
+    const remoteState = room.state || getState();
+    const players = normalizePlayers(remoteState.players);
+    players[1] = playerName || "백";
+    const joinedState = {
+      ...remoteState,
+      players,
+      stones: normalizeStones(remoteState.stones),
+      currentPlayer: 0,
+      turnStartedAt: Date.now(),
+      shotActive: false,
+      gameOver: false,
+      winner: null,
+      message: "온라인 대전 시작! 흑 차례입니다.",
+      updatedBy: CLIENT_ID,
+      updatedAt: Date.now(),
+    };
+
     await dbModule.update(dbModule.ref(db, `${ROOM_PATH}/${roomCode}/players`), {
       white: CLIENT_ID,
     });
-    const remoteState = snapshot.val().state;
-    if (remoteState) {
-      onRemoteState(remoteState);
-    }
+    await dbModule.set(stateRef(roomCode), joinedState);
+    onRemoteState(joinedState);
     listen(roomCode);
     setStatus(`방 ${roomCode} 입장됨 · 백으로 참가 중`);
     return { roomCode, playerSlot };
@@ -113,6 +181,7 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
     },
     createRoom,
     joinRoom,
+    leaveRoom,
     publish,
     isLocalTurn: (currentPlayer) => playerSlot === null || playerSlot === currentPlayer,
   };

@@ -81,6 +81,7 @@ button {
 }
 
 .title-block,
+.mode-card,
 .turn-card,
 .control-card,
 .online-card {
@@ -111,9 +112,45 @@ button {
 }
 
 .turn-card,
+.mode-card,
 .control-card,
 .online-card {
   padding: 16px;
+}
+
+.mode-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.player-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.player-pair div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(95, 75, 43, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.player-pair span,
+.score-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.player-pair strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
 }
 
 .turn-heading {
@@ -203,6 +240,7 @@ button {
 }
 
 .score-card label,
+.score-card .score-label,
 .control-card label {
   display: block;
   margin-bottom: 6px;
@@ -212,6 +250,7 @@ button {
 }
 
 .score-card input,
+.large-input,
 .control-card select,
 .online-card input {
   width: 100%;
@@ -233,6 +272,13 @@ button {
   font-size: 28px;
 }
 
+.score-card div strong {
+  display: block;
+  justify-self: auto;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
 .stone-dot {
   width: 30px;
   height: 30px;
@@ -250,9 +296,26 @@ button {
 }
 
 .control-card select,
+.large-input,
 .online-card input {
   height: 40px;
   padding: 0 10px;
+}
+
+.field-label {
+  display: block;
+  margin: 18px 0 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.error-text {
+  min-height: 20px;
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .button-row {
@@ -294,6 +357,74 @@ button {
 
 .online-card {
   margin-top: auto;
+}
+
+.start-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(26, 22, 16, 0.5);
+  backdrop-filter: blur(5px);
+  z-index: 3;
+}
+
+.start-overlay.hidden {
+  display: none;
+}
+
+.start-panel {
+  width: min(560px, 100%);
+  max-height: min(92vh, 680px);
+  overflow-y: auto;
+  padding: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.start-panel h1 {
+  margin: 6px 0 0;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.mode-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.mode-option {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(95, 75, 43, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.mode-option strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.join-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 8px;
+}
+
+.start-panel .status-text {
+  margin-top: 6px;
+}
+
+.start-panel .primary-button,
+.start-panel .secondary-button {
+  width: 100%;
 }
 
 .winner-overlay {
@@ -352,6 +483,7 @@ button {
   }
 
   .title-block,
+  .mode-card,
   .online-card {
     grid-column: 1 / -1;
   }
@@ -393,6 +525,19 @@ button {
   }
 
   .button-row {
+    grid-template-columns: 1fr;
+  }
+
+  .start-panel {
+    padding: 20px;
+  }
+
+  .start-panel h1 {
+    font-size: 28px;
+  }
+
+  .join-row,
+  .player-pair {
     grid-template-columns: 1fr;
   }
 }

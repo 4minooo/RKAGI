@@ -4,6 +4,18 @@ const canvas = document.querySelector("#gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const els = {
+  startOverlay: document.querySelector("#startOverlay"),
+  nicknameInput: document.querySelector("#nicknameInput"),
+  startError: document.querySelector("#startError"),
+  startSoloButton: document.querySelector("#startSoloButton"),
+  startCreateRoomButton: document.querySelector("#startCreateRoomButton"),
+  startJoinRoomButton: document.querySelector("#startJoinRoomButton"),
+  startRoomCodeInput: document.querySelector("#startRoomCodeInput"),
+  startOnlineStatus: document.querySelector("#startOnlineStatus"),
+  modeLabel: document.querySelector("#modeLabel"),
+  modeDescription: document.querySelector("#modeDescription"),
+  myNameLabel: document.querySelector("#myNameLabel"),
+  opponentNameLabel: document.querySelector("#opponentNameLabel"),
   currentPlayerBadge: document.querySelector("#currentPlayerBadge"),
   currentPlayerName: document.querySelector("#currentPlayerName"),
   timerText: document.querySelector("#timerText"),
@@ -29,11 +41,14 @@ const els = {
 const BOARD_LINES = 19;
 const MAX_TURN_MS = 20_000;
 const STONE_RADIUS = 0.38;
-const MAX_PULL = 2.6;
-const SHOT_POWER = 4.25;
-const STOP_SPEED = 0.035;
-const FRICTION = 1.85;
+const MAX_PULL = 2.9;
+const SHOT_POWER = 6.35;
+const STOP_SPEED = 0.045;
+const FRICTION = 2.05;
 const OUT_PADDING = 0.62;
+const SOLO_OPPONENT = "연습 상대";
+const WAITING_OPPONENT = "상대 대기 중";
+const NICKNAME_KEY = "alkkagi.nickname";
 const STAR_POINTS = [
   [3, 3],
   [9, 3],
@@ -53,22 +68,23 @@ let view = {
   cell: 1,
 };
 
-let state = createInitialState(5);
+let appMode = "setup";
+let localName = "";
+let state = createInitialState(5, ["나", SOLO_OPPONENT]);
 let drag = null;
 let lastFrame = performance.now();
 let motionSettledAt = null;
 let firebaseBridge = null;
 
-function createInitialState(count) {
-  const players = [els?.playerOneName?.value || "플레이어 1", els?.playerTwoName?.value || "플레이어 2"];
+function createInitialState(count, players = [localName || "나", SOLO_OPPONENT], message) {
   return {
-    players,
+    players: normalizePlayers(players),
     currentPlayer: 0,
     turnStartedAt: Date.now(),
     shotActive: false,
     gameOver: false,
     winner: null,
-    message: "자신의 돌을 뒤로 당겼다가 놓으세요.",
+    message: message || "자신의 돌을 뒤로 당겼다가 놓으세요.",
     stones: makeStones(count),
   };
 }
@@ -132,6 +148,23 @@ function makeStone(id, owner, x, y) {
   };
 }
 
+function normalizePlayers(players) {
+  return [
+    players?.[0] || players?.["0"] || "흑",
+    players?.[1] || players?.["1"] || SOLO_OPPONENT,
+  ];
+}
+
+function normalizeStones(stones) {
+  if (Array.isArray(stones)) {
+    return stones;
+  }
+
+  return Object.keys(stones || {})
+    .sort((a, b) => Number(a) - Number(b))
+    .map((key) => stones[key]);
+}
+
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -163,7 +196,25 @@ function canvasToBoard(clientX, clientY) {
 }
 
 function playerName(index) {
-  return state.players[index] || `플레이어 ${index + 1}`;
+  return state.players[index] || (index === 0 ? "흑" : "백");
+}
+
+function localSlot() {
+  return appMode === "online" ? firebaseBridge?.playerSlot ?? null : 0;
+}
+
+function opponentName() {
+  if (appMode === "online") {
+    const slot = localSlot();
+    if (slot === 0) {
+      return playerName(1);
+    }
+    if (slot === 1) {
+      return playerName(0);
+    }
+  }
+
+  return playerName(1);
 }
 
 function aliveStones(owner) {
@@ -174,12 +225,30 @@ function isMoving() {
   return state.stones.some((stone) => stone.alive && Math.hypot(stone.vx, stone.vy) > STOP_SPEED);
 }
 
+function onlineReady() {
+  return appMode === "online" && state.players[0] && state.players[1] && state.players[1] !== WAITING_OPPONENT;
+}
+
+function gameActive() {
+  return appMode === "solo" || onlineReady();
+}
+
 function canControlCurrentTurn() {
-  return !firebaseBridge || firebaseBridge.isLocalTurn(state.currentPlayer);
+  if (state.gameOver || !gameActive()) {
+    return false;
+  }
+
+  return appMode !== "online" || firebaseBridge?.isLocalTurn(state.currentPlayer);
+}
+
+function canStartNewGame() {
+  return appMode === "solo" || (appMode === "online" && firebaseBridge?.playerSlot === 0);
 }
 
 function syncState(force = false) {
-  firebaseBridge?.publish(force);
+  if (appMode === "online") {
+    firebaseBridge?.publish(force);
+  }
 }
 
 function serializeState() {
@@ -190,14 +259,146 @@ function applyRemoteState(remoteState) {
   const cleaned = JSON.parse(JSON.stringify(remoteState));
   delete cleaned.updatedBy;
   delete cleaned.updatedAt;
+  cleaned.players = normalizePlayers(cleaned.players);
+  cleaned.stones = normalizeStones(cleaned.stones);
+  cleaned.winner = cleaned.winner ?? null;
+  cleaned.shotActive = cleaned.shotActive === true;
+  cleaned.gameOver = cleaned.gameOver === true;
   state = cleaned;
   drag = null;
   updateHud();
   showWinnerIfNeeded();
 }
 
+function sanitizeNickname(value) {
+  return value.trim().replace(/\s+/g, " ").slice(0, 12);
+}
+
+function requireNickname() {
+  const name = sanitizeNickname(els.nicknameInput.value);
+  if (!name) {
+    setStartError("닉네임을 먼저 입력하세요.");
+    els.nicknameInput.focus();
+    return "";
+  }
+
+  localName = name;
+  localStorage.setItem(NICKNAME_KEY, name);
+  setStartError("");
+  return name;
+}
+
+function setStartError(message) {
+  els.startError.textContent = message;
+}
+
+function cleanRoomCode(value) {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
+function syncRoomInputs(source) {
+  const value = cleanRoomCode(source.value);
+  source.value = value;
+  if (source !== els.roomCodeInput) {
+    els.roomCodeInput.value = value;
+  }
+  if (source !== els.startRoomCodeInput) {
+    els.startRoomCodeInput.value = value;
+  }
+  return value;
+}
+
+function hideStartOverlay() {
+  els.startOverlay.classList.add("hidden");
+}
+
+function startSolo() {
+  const name = requireNickname();
+  if (!name) {
+    return;
+  }
+
+  firebaseBridge?.leaveRoom();
+  appMode = "solo";
+  state = createInitialState(Number(els.stoneCount.value), [name, SOLO_OPPONENT], "혼자 하기 모드입니다. 양쪽 돌을 모두 직접 조작할 수 있습니다.");
+  drag = null;
+  motionSettledAt = null;
+  els.winnerOverlay.classList.add("hidden");
+  hideStartOverlay();
+  updateHud();
+}
+
+async function createOnlineRoom() {
+  const name = requireNickname();
+  if (!name || !firebaseBridge?.ready) {
+    setStartError("Firebase 연결을 확인한 뒤 다시 시도하세요.");
+    return;
+  }
+
+  const previousMode = appMode;
+  const previousState = JSON.parse(JSON.stringify(state));
+  state = createInitialState(
+    Number(els.stoneCount.value),
+    [name, WAITING_OPPONENT],
+    "방을 만들었습니다. 친구가 입장하면 흑 차례로 시작합니다.",
+  );
+
+  try {
+    const room = await firebaseBridge.createRoom();
+    appMode = "online";
+    els.roomCodeInput.value = room.roomCode;
+    els.startRoomCodeInput.value = room.roomCode;
+    hideStartOverlay();
+    updateOnlineStatus(`방 ${room.roomCode} 생성됨 · 친구에게 숫자 6자리를 알려주세요.`);
+    updateHud();
+  } catch (error) {
+    appMode = previousMode;
+    state = previousState;
+    setStartError(error.message);
+    updateOnlineStatus(error.message);
+    updateHud();
+  }
+}
+
+async function joinOnlineRoom(input) {
+  const name = requireNickname();
+  const code = cleanRoomCode(input.value);
+  input.value = code;
+  els.roomCodeInput.value = code;
+  els.startRoomCodeInput.value = code;
+
+  if (!name) {
+    return;
+  }
+  if (!firebaseBridge?.ready) {
+    setStartError("Firebase 연결을 확인한 뒤 다시 시도하세요.");
+    return;
+  }
+  if (code.length !== 6) {
+    setStartError("방 코드는 숫자 6자리입니다.");
+    return;
+  }
+
+  try {
+    await firebaseBridge.joinRoom(code, { playerName: name });
+    appMode = "online";
+    hideStartOverlay();
+    updateOnlineStatus(`방 ${code} 입장됨 · 백으로 참가 중입니다.`);
+    updateHud();
+  } catch (error) {
+    setStartError(error.message);
+    updateOnlineStatus(error.message);
+  }
+}
+
 function newGame(sync = true) {
-  state = createInitialState(Number(els.stoneCount.value));
+  if (!canStartNewGame()) {
+    return;
+  }
+
+  const players =
+    appMode === "online" ? [playerName(0), onlineReady() ? playerName(1) : WAITING_OPPONENT] : [localName, SOLO_OPPONENT];
+  state = createInitialState(Number(els.stoneCount.value), players);
   drag = null;
   motionSettledAt = null;
   els.winnerOverlay.classList.add("hidden");
@@ -207,8 +408,8 @@ function newGame(sync = true) {
   }
 }
 
-function passTurn(reason = "턴을 넘겼습니다.") {
-  if (state.gameOver || isMoving()) {
+function passTurn(reason = "턴이 넘어왔습니다.") {
+  if (state.gameOver || isMoving() || !canControlCurrentTurn()) {
     return;
   }
   state.currentPlayer = 1 - state.currentPlayer;
@@ -232,20 +433,65 @@ function endTurnAfterMotion() {
   syncState(true);
 }
 
+function updateOnlineStatus(message) {
+  els.onlineStatus.textContent = message;
+  els.startOnlineStatus.textContent = message;
+}
+
 function updateHud() {
   const current = state.currentPlayer;
+  const playerSlot = localSlot();
+  const roomCode = firebaseBridge?.roomCode || "";
+  const waitingOnline = appMode === "online" && !onlineReady();
+
   els.currentPlayerName.textContent = playerName(current);
   els.currentPlayerBadge.textContent = current === 0 ? "흑" : "백";
   els.currentPlayerBadge.classList.toggle("player-one", current === 0);
   els.currentPlayerBadge.classList.toggle("player-two", current === 1);
+  els.playerOneName.textContent = playerName(0);
+  els.playerTwoName.textContent = playerName(1);
   els.playerOneCount.textContent = aliveStones(0).length;
   els.playerTwoCount.textContent = aliveStones(1).length;
-  els.statusText.textContent = canControlCurrentTurn()
-    ? state.message
-    : "상대가 조작하는 차례입니다.";
+  els.myNameLabel.textContent = localName || "-";
+  els.opponentNameLabel.textContent = opponentName() || "-";
+
+  if (appMode === "setup") {
+    els.modeLabel.textContent = "입장 대기";
+    els.modeDescription.textContent = "닉네임을 입력한 뒤 혼자 하기 또는 온라인 대전을 선택하세요.";
+    els.statusText.textContent = "닉네임을 입력하고 게임을 시작하세요.";
+  } else if (appMode === "solo") {
+    els.modeLabel.textContent = "혼자 하기";
+    els.modeDescription.textContent = "같은 기기에서 양쪽 돌을 번갈아 조작합니다.";
+    els.statusText.textContent = state.message;
+  } else {
+    const color = playerSlot === 0 ? "흑" : "백";
+    els.modeLabel.textContent = "온라인 대전";
+    els.modeDescription.textContent = waitingOnline
+      ? `방 ${roomCode} · 친구 입장 대기 중`
+      : `방 ${roomCode} · 나는 ${color}, 상대는 ${color === "흑" ? "백" : "흑"}`;
+    if (waitingOnline) {
+      els.statusText.textContent = `친구가 ${roomCode} 방에 입장하면 시작합니다.`;
+    } else if (canControlCurrentTurn()) {
+      els.statusText.textContent = `내 차례입니다. ${state.message}`;
+    } else {
+      els.statusText.textContent = `상대 차례입니다. ${playerName(current)}님의 샷을 기다리는 중입니다.`;
+    }
+  }
+
+  els.newGameButton.disabled = !canStartNewGame();
+  els.playAgainButton.disabled = !canStartNewGame();
+  els.passButton.disabled = !canControlCurrentTurn() || isMoving();
+  els.stoneCount.disabled = appMode === "online" && firebaseBridge?.playerSlot === 1;
 }
 
 function updateTimer() {
+  if (!gameActive() || state.gameOver) {
+    els.timerText.textContent = "20.0";
+    els.timerBar.style.width = "100%";
+    els.timerBar.style.backgroundColor = "var(--accent)";
+    return;
+  }
+
   const elapsed = Date.now() - state.turnStartedAt;
   const remaining = Math.max(0, MAX_TURN_MS - elapsed);
   const ratio = remaining / MAX_TURN_MS;
@@ -253,7 +499,7 @@ function updateTimer() {
   els.timerBar.style.width = `${ratio * 100}%`;
   els.timerBar.style.backgroundColor = ratio < 0.25 ? "var(--danger)" : "var(--accent)";
 
-  if (!state.gameOver && !state.shotActive && !isMoving() && remaining <= 0 && canControlCurrentTurn()) {
+  if (!state.shotActive && !isMoving() && remaining <= 0 && canControlCurrentTurn()) {
     passTurn("20초가 지나 턴이 넘어왔습니다.");
   }
 }
@@ -398,7 +644,10 @@ function draw() {
 }
 
 function stepPhysics(dt) {
-  if (state.gameOver) {
+  if (state.gameOver || !gameActive()) {
+    return;
+  }
+  if (appMode === "online" && !firebaseBridge?.isLocalTurn(state.currentPlayer)) {
     return;
   }
 
@@ -480,7 +729,10 @@ function resolveCollision(a, b) {
 }
 
 function checkWinner() {
-  if (state.gameOver) {
+  if (state.gameOver || !gameActive()) {
+    return;
+  }
+  if (appMode === "online" && !firebaseBridge?.isLocalTurn(state.currentPlayer)) {
     return;
   }
 
@@ -519,12 +771,13 @@ function frame(now) {
     motionSettledAt = null;
   } else if (motionSettledAt === null) {
     motionSettledAt = now;
-  } else if (!state.gameOver && state.shotActive && now - motionSettledAt > 520) {
+  } else if (!state.gameOver && state.shotActive && now - motionSettledAt > 430) {
     motionSettledAt = null;
     endTurnAfterMotion();
   }
 
   updateTimer();
+  updateHud();
   draw();
   requestAnimationFrame(frame);
 }
@@ -538,6 +791,12 @@ function findStoneAt(point) {
 }
 
 function pointerDown(event) {
+  if (!gameActive()) {
+    state.message = appMode === "online" ? "친구가 입장하면 시작합니다." : "닉네임을 입력하고 게임을 시작하세요.";
+    updateHud();
+    return;
+  }
+
   if (state.gameOver || isMoving() || !canControlCurrentTurn()) {
     return;
   }
@@ -602,38 +861,34 @@ function pointerUp(event) {
   syncState(true);
 }
 
-function updateNames() {
-  state.players = [els.playerOneName.value.trim() || "플레이어 1", els.playerTwoName.value.trim() || "플레이어 2"];
-  updateHud();
-  showWinnerIfNeeded();
-  syncState(true);
-}
-
 async function setupFirebase() {
   try {
     firebaseBridge = await createFirebaseBridge({
       onRemoteState: applyRemoteState,
       getState: serializeState,
-      setStatus: (message) => {
-        els.onlineStatus.textContent = message;
-      },
+      setStatus: updateOnlineStatus,
     });
   } catch (error) {
     console.error(error);
     firebaseBridge = null;
     els.createRoomButton.disabled = true;
     els.joinRoomButton.disabled = true;
-    els.onlineStatus.textContent = "Firebase 연결에 실패했습니다. 설정값과 Realtime Database 규칙을 확인하세요.";
+    els.startCreateRoomButton.disabled = true;
+    els.startJoinRoomButton.disabled = true;
+    updateOnlineStatus("Firebase 연결에 실패했습니다. 설정값과 Realtime Database 규칙을 확인하세요.");
     return;
   }
 
   if (!firebaseBridge.ready) {
     els.createRoomButton.disabled = true;
     els.joinRoomButton.disabled = true;
+    els.startCreateRoomButton.disabled = true;
+    els.startJoinRoomButton.disabled = true;
+    updateOnlineStatus("Firebase 설정을 넣으면 온라인 대전을 사용할 수 있습니다.");
     return;
   }
 
-  els.onlineStatus.textContent = "Firebase 연결 가능 · 방을 만들거나 코드로 입장하세요.";
+  updateOnlineStatus("Firebase 연결 가능 · 숫자 6자리 방을 만들거나 입장하세요.");
 }
 
 function bindEvents() {
@@ -649,36 +904,35 @@ function bindEvents() {
     drag = null;
   });
 
+  els.nicknameInput.addEventListener("input", () => {
+    localName = sanitizeNickname(els.nicknameInput.value);
+    updateHud();
+  });
+  els.startSoloButton.addEventListener("click", startSolo);
+  els.startCreateRoomButton.addEventListener("click", createOnlineRoom);
+  els.startJoinRoomButton.addEventListener("click", () => joinOnlineRoom(els.startRoomCodeInput));
+  els.startRoomCodeInput.addEventListener("input", () => syncRoomInputs(els.startRoomCodeInput));
+
   els.newGameButton.addEventListener("click", () => newGame(true));
   els.playAgainButton.addEventListener("click", () => newGame(true));
   els.passButton.addEventListener("click", () => {
-    if (canControlCurrentTurn()) {
-      passTurn("상대가 턴을 넘겼습니다. 자신의 돌을 뒤로 당겼다가 놓으세요.");
-    }
+    passTurn("상대가 턴을 넘겼습니다. 자신의 돌을 뒤로 당겼다가 놓으세요.");
   });
-  els.stoneCount.addEventListener("change", () => newGame(true));
-  els.playerOneName.addEventListener("input", updateNames);
-  els.playerTwoName.addEventListener("input", updateNames);
-
-  els.createRoomButton.addEventListener("click", async () => {
-    try {
-      const room = await firebaseBridge.createRoom();
-      els.roomCodeInput.value = room.roomCode;
-    } catch (error) {
-      els.onlineStatus.textContent = error.message;
+  els.stoneCount.addEventListener("change", () => {
+    if (appMode === "solo") {
+      newGame(false);
     }
   });
 
-  els.joinRoomButton.addEventListener("click", async () => {
-    try {
-      await firebaseBridge.joinRoom(els.roomCodeInput.value);
-    } catch (error) {
-      els.onlineStatus.textContent = error.message;
-    }
-  });
+  els.roomCodeInput.addEventListener("input", () => syncRoomInputs(els.roomCodeInput));
+  els.createRoomButton.addEventListener("click", createOnlineRoom);
+  els.joinRoomButton.addEventListener("click", () => joinOnlineRoom(els.roomCodeInput));
 }
 
 async function boot() {
+  const savedName = localStorage.getItem(NICKNAME_KEY) || "";
+  els.nicknameInput.value = savedName;
+  localName = sanitizeNickname(savedName);
   resizeCanvas();
   bindEvents();
   await setupFirebase();

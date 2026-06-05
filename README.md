@@ -5,12 +5,15 @@
 ## 기능
 
 - 19줄 바둑판 기반 알까기
-- 2인 플레이
+- 시작 시 닉네임 입력
+- 혼자 하기와 온라인 대전 모드 분리
+- 온라인 대전 숫자 6자리 방 코드
+- 온라인 입장 후 내 이름과 상대 이름 표시
 - 각자 동일한 수의 바둑알 선택: 3, 5, 7, 9개
 - 드래그 앤 릴리즈 방식의 샷
 - 턴당 20초 제한 시간
 - 상대 돌을 모두 제거하면 승자 이름과 축하 메시지 표시
-- Firebase Realtime Database 설정 시 온라인 방 생성/입장
+- Firebase Realtime Database를 통한 온라인 방 동기화
 
 ## 로컬 실행
 
@@ -20,11 +23,11 @@
 npx serve .
 ```
 
-또는 `index.html`을 브라우저로 열어도 로컬 2인 플레이는 동작합니다.
+또는 정적 서버로 `index.html`을 제공하면 됩니다. 브라우저 보안 정책 때문에 ES module은 `file://`보다 `localhost`에서 확인하는 편이 좋습니다.
 
 ## Firebase 설정
 
-온라인 방 기능을 쓰려면 `firebase-config.example.js`를 참고해 `firebase-config.js`의 값을 채우세요.
+`firebase-config.js`에 Firebase 웹 앱 설정이 들어 있어야 온라인 대전이 켜집니다.
 
 ```js
 window.ALKKAGI_FIREBASE_CONFIG = {
@@ -32,15 +35,22 @@ window.ALKKAGI_FIREBASE_CONFIG = {
   authDomain: "YOUR_PROJECT.firebaseapp.com",
   databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
   projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
+  storageBucket: "YOUR_PROJECT.firebasestorage.app",
   messagingSenderId: "YOUR_SENDER_ID",
   appId: "YOUR_APP_ID",
 };
 ```
 
-Realtime Database 규칙은 `database.rules.json`에 들어 있습니다. Firebase Console의 Realtime Database > 규칙 탭에 그대로 붙여넣으면 됩니다.
+Realtime Database 규칙은 `database.rules.json`에 들어 있습니다. Firebase Console의 Realtime Database > 규칙 탭에 전체 내용을 붙여넣고 게시하세요.
 
-현재 앱은 Firebase Authentication 없이 방 코드를 공유하는 구조입니다. 그래서 규칙은 루트 경로를 닫고 `alkkagiRooms/{방코드}`만 열어두되, 방 코드와 게임 상태 데이터 모양을 검증합니다. 공개 서비스로 키울 때는 익명 로그인이나 계정 로그인을 붙여 플레이어별 쓰기 권한까지 좁히는 것을 권장합니다.
+이번 버전부터 방 코드는 숫자 6자리만 허용합니다.
+
+```json
+".read": "$room.matches(/^[0-9]{6}$/)",
+".write": "newData.exists() && $room.matches(/^[0-9]{6}$/)"
+```
+
+현재 앱은 Firebase Authentication 없이 방 코드를 공유하는 구조입니다. 친구와 가볍게 플레이하기에는 충분하지만, 공개 서비스로 키울 때는 익명 로그인이나 계정 로그인을 붙여 플레이어별 쓰기 권한까지 좁히는 것을 권장합니다.
 
 ## Vercel 배포
 

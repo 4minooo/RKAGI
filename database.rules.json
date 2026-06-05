@@ -4,8 +4,8 @@
     ".write": false,
     "alkkagiRooms": {
       "$room": {
-        ".read": "$room.matches(/^[A-Z0-9]{6}$/)",
-        ".write": "newData.exists() && $room.matches(/^[A-Z0-9]{6}$/)",
+        ".read": "$room.matches(/^[0-9]{6}$/)",
+        ".write": "newData.exists() && $room.matches(/^[0-9]{6}$/)",
         ".validate": "newData.hasChildren(['createdAt', 'players', 'state'])",
         "createdAt": {
           ".validate": "newData.isNumber() && newData.val() <= now + 10000"

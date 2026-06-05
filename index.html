@@ -11,6 +11,57 @@
       <section class="game-stage" aria-label="알까기 게임판">
         <div class="board-wrap">
           <canvas id="gameCanvas" aria-label="바둑판 알까기 게임"></canvas>
+
+          <div id="startOverlay" class="start-overlay" role="dialog" aria-modal="true">
+            <div class="start-panel">
+              <p class="eyebrow">입장 설정</p>
+              <h1>닉네임을 정하세요</h1>
+
+              <label class="field-label" for="nicknameInput">내 닉네임</label>
+              <input
+                id="nicknameInput"
+                class="large-input"
+                type="text"
+                maxlength="12"
+                placeholder="예: rkagi"
+                autocomplete="nickname"
+              />
+              <p id="startError" class="error-text" aria-live="polite"></p>
+
+              <div class="mode-options">
+                <section class="mode-option" aria-label="혼자 하기">
+                  <div>
+                    <p class="label">혼자 하기</p>
+                    <strong>같은 기기에서 연습</strong>
+                    <p class="status-text">온라인 연결 없이 바로 시작합니다.</p>
+                  </div>
+                  <button id="startSoloButton" class="primary-button" type="button">혼자 시작</button>
+                </section>
+
+                <section class="mode-option" aria-label="온라인 친구 대전">
+                  <div>
+                    <p class="label">온라인 대전</p>
+                    <strong>친구와 방 코드로 플레이</strong>
+                    <p id="startOnlineStatus" class="status-text">숫자 6자리 방을 만들거나 입장하세요.</p>
+                  </div>
+                  <button id="startCreateRoomButton" class="primary-button" type="button">방 만들기</button>
+                  <div class="join-row">
+                    <input
+                      id="startRoomCodeInput"
+                      class="large-input"
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      maxlength="6"
+                      placeholder="방 코드 6자리"
+                    />
+                    <button id="startJoinRoomButton" class="secondary-button" type="button">입장</button>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+
           <div id="winnerOverlay" class="winner-overlay hidden" role="dialog" aria-modal="true">
             <div class="winner-panel">
               <p class="eyebrow">경기 종료</p>
@@ -28,12 +79,28 @@
           <h1>알까기 대전</h1>
         </header>
 
+        <section class="mode-card" aria-label="현재 플레이 모드">
+          <p class="label">현재 모드</p>
+          <strong id="modeLabel">입장 대기</strong>
+          <p id="modeDescription" class="status-text">닉네임을 입력한 뒤 혼자 하기 또는 온라인 대전을 선택하세요.</p>
+          <div class="player-pair">
+            <div>
+              <span>나</span>
+              <strong id="myNameLabel">-</strong>
+            </div>
+            <div>
+              <span>상대</span>
+              <strong id="opponentNameLabel">-</strong>
+            </div>
+          </div>
+        </section>
+
         <section class="turn-card" aria-label="현재 턴">
           <div class="turn-heading">
             <span id="currentPlayerBadge" class="player-badge player-one">흑</span>
             <div>
               <p class="label">현재 차례</p>
-              <strong id="currentPlayerName">플레이어 1</strong>
+              <strong id="currentPlayerName">대기 중</strong>
             </div>
           </div>
           <div class="timer-row">
@@ -45,29 +112,30 @@
               <span id="timerBar"></span>
             </div>
           </div>
-          <p id="statusText" class="status-text">자신의 돌을 뒤로 당겼다가 놓으세요.</p>
+          <p id="statusText" class="status-text">닉네임을 입력하고 게임을 시작하세요.</p>
         </section>
 
         <section class="score-grid" aria-label="남은 바둑알">
           <div class="score-card">
             <span class="stone-dot black"></span>
             <div>
-              <label for="playerOneName">흑 이름</label>
-              <input id="playerOneName" type="text" value="플레이어 1" maxlength="12" />
+              <span class="score-label">흑</span>
+              <strong id="playerOneName">-</strong>
             </div>
             <strong id="playerOneCount">5</strong>
           </div>
           <div class="score-card">
             <span class="stone-dot white"></span>
             <div>
-              <label for="playerTwoName">백 이름</label>
-              <input id="playerTwoName" type="text" value="플레이어 2" maxlength="12" />
+              <span class="score-label">백</span>
+              <strong id="playerTwoName">-</strong>
             </div>
             <strong id="playerTwoCount">5</strong>
           </div>
         </section>
 
-        <section class="control-card" aria-label="경기 설정">
+        <section class="control-card" aria-label="혼자 하기 설정">
+          <p class="label">혼자 하기 설정</p>
           <label for="stoneCount">각자 바둑알 수</label>
           <select id="stoneCount">
             <option value="3">3개</option>
@@ -81,12 +149,19 @@
           </div>
         </section>
 
-        <section class="online-card" aria-label="Firebase 온라인 방">
+        <section class="online-card" aria-label="온라인 대전">
           <div>
-            <p class="label">Firebase 방</p>
-            <p id="onlineStatus" class="status-text">Firebase 설정을 넣으면 온라인 방을 사용할 수 있습니다.</p>
+            <p class="label">온라인 대전</p>
+            <p id="onlineStatus" class="status-text">닉네임 입력 후 숫자 6자리 방을 만들거나 입장하세요.</p>
           </div>
-          <input id="roomCodeInput" type="text" placeholder="방 코드" maxlength="8" />
+          <input
+            id="roomCodeInput"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            placeholder="방 코드 6자리"
+            maxlength="6"
+          />
           <div class="button-row">
             <button id="createRoomButton" class="secondary-button" type="button">방 만들기</button>
             <button id="joinRoomButton" class="secondary-button" type="button">입장</button>
