@@ -610,13 +610,22 @@ function updateNames() {
 }
 
 async function setupFirebase() {
-  firebaseBridge = await createFirebaseBridge({
-    onRemoteState: applyRemoteState,
-    getState: serializeState,
-    setStatus: (message) => {
-      els.onlineStatus.textContent = message;
-    },
-  });
+  try {
+    firebaseBridge = await createFirebaseBridge({
+      onRemoteState: applyRemoteState,
+      getState: serializeState,
+      setStatus: (message) => {
+        els.onlineStatus.textContent = message;
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    firebaseBridge = null;
+    els.createRoomButton.disabled = true;
+    els.joinRoomButton.disabled = true;
+    els.onlineStatus.textContent = "Firebase 연결에 실패했습니다. 설정값과 Realtime Database 규칙을 확인하세요.";
+    return;
+  }
 
   if (!firebaseBridge.ready) {
     els.createRoomButton.disabled = true;
