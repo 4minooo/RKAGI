@@ -42,7 +42,7 @@ const BOARD_LINES = 19;
 const MAX_TURN_MS = 20_000;
 const STONE_RADIUS = 0.38;
 const MAX_PULL = 2.9;
-const SHOT_POWER = 6.35;
+const SHOT_POWER = 10.8;
 const STOP_SPEED = 0.045;
 const FRICTION = 2.05;
 const OUT_PADDING = 0.62;
@@ -75,6 +75,14 @@ let drag = null;
 let lastFrame = performance.now();
 let motionSettledAt = null;
 let firebaseBridge = null;
+let audioContext = null;
+let soundSerial = 0;
+let lastPlayedSoundEventId = "";
+const lastSoundAt = {
+  shoot: 0,
+  collision: 0,
+  death: 0,
+};
 
 function createInitialState(count, players = [localName || "나", SOLO_OPPONENT], message) {
   return {
@@ -83,6 +91,7 @@ function createInitialState(count, players = [localName || "나", SOLO_OPPONENT]
     turnStartedAt: gameNow(),
     shotActive: false,
     shotOwner: null,
+    soundEvent: null,
     gameOver: false,
     winner: null,
     message: message || "자신의 돌을 뒤로 당겼다가 놓으세요.",
@@ -275,6 +284,7 @@ function serializeState() {
 }
 
 function applyRemoteState(remoteState) {
+  const previousSoundEventId = state.soundEvent?.id || "";
   const cleaned = JSON.parse(JSON.stringify(remoteState));
   delete cleaned.updatedBy;
   delete cleaned.updatedAt;
@@ -283,11 +293,126 @@ function applyRemoteState(remoteState) {
   cleaned.winner = cleaned.winner ?? null;
   cleaned.shotActive = cleaned.shotActive === true;
   cleaned.shotOwner = typeof cleaned.shotOwner === "number" ? cleaned.shotOwner : null;
+  cleaned.soundEvent = cleaned.soundEvent || null;
   cleaned.gameOver = cleaned.gameOver === true;
   state = cleaned;
   drag = null;
+  if (state.soundEvent?.id && state.soundEvent.id !== previousSoundEventId) {
+    playSoundEvent(state.soundEvent);
+  }
   updateHud();
   showWinnerIfNeeded();
+}
+
+function ensureAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume();
+  }
+
+  return audioContext;
+}
+
+function playTone({ frequency, endFrequency, duration, type = "sine", gain = 0.18 }) {
+  const audio = ensureAudio();
+  if (!audio) {
+    return;
+  }
+
+  const now = audio.currentTime;
+  const oscillator = audio.createOscillator();
+  const volume = audio.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+  if (endFrequency) {
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), now + duration);
+  }
+  volume.gain.setValueAtTime(0.0001, now);
+  volume.gain.exponentialRampToValueAtTime(gain, now + 0.012);
+  volume.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  oscillator.connect(volume);
+  volume.connect(audio.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.02);
+}
+
+function playNoise({ duration, gain = 0.12, filterFrequency = 1200 }) {
+  const audio = ensureAudio();
+  if (!audio) {
+    return;
+  }
+
+  const sampleRate = audio.sampleRate;
+  const buffer = audio.createBuffer(1, Math.ceil(sampleRate * duration), sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i += 1) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  }
+
+  const now = audio.currentTime;
+  const source = audio.createBufferSource();
+  const filter = audio.createBiquadFilter();
+  const volume = audio.createGain();
+  source.buffer = buffer;
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(filterFrequency, now);
+  volume.gain.setValueAtTime(gain, now);
+  volume.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  source.connect(filter);
+  filter.connect(volume);
+  volume.connect(audio.destination);
+  source.start(now);
+  source.stop(now + duration);
+}
+
+function playSound(type, strength = 1) {
+  const clamped = Math.max(0.2, Math.min(2.2, strength));
+  if (type === "shoot") {
+    playNoise({ duration: 0.16, gain: 0.08 * clamped, filterFrequency: 780 });
+    playTone({ frequency: 180, endFrequency: 90, duration: 0.14, type: "triangle", gain: 0.12 * clamped });
+  } else if (type === "collision") {
+    playTone({ frequency: 560, endFrequency: 240, duration: 0.075, type: "square", gain: 0.08 * clamped });
+    playNoise({ duration: 0.055, gain: 0.055 * clamped, filterFrequency: 2400 });
+  } else if (type === "death") {
+    playTone({ frequency: 220, endFrequency: 58, duration: 0.24, type: "sawtooth", gain: 0.12 * clamped });
+    playNoise({ duration: 0.2, gain: 0.09 * clamped, filterFrequency: 520 });
+  }
+}
+
+function playSoundEvent(event) {
+  if (!event?.id || event.id === lastPlayedSoundEventId) {
+    return;
+  }
+  lastPlayedSoundEventId = event.id;
+  playSound(event.type, event.strength);
+}
+
+function emitSound(type, strength = 1, { sync = true, throttleMs = 0 } = {}) {
+  const now = performance.now();
+  if (throttleMs && now - lastSoundAt[type] < throttleMs) {
+    return;
+  }
+  lastSoundAt[type] = now;
+
+  const event = {
+    id: `${Date.now()}-${soundSerial++}`,
+    type,
+    strength: Number(Math.max(0.2, Math.min(2.2, strength)).toFixed(2)),
+  };
+
+  state.soundEvent = event;
+  playSoundEvent(event);
+  if (sync) {
+    syncState(true);
+  }
 }
 
 function sanitizeNickname(value) {
@@ -304,6 +429,7 @@ function requireNickname() {
 
   localName = name;
   localStorage.setItem(NICKNAME_KEY, name);
+  ensureAudio();
   setStartError("");
   return name;
 }
@@ -719,13 +845,18 @@ function stepPhysics(dt) {
       stone.vx = 0;
       stone.vy = 0;
       state.message = `${stone.owner === 0 ? "흑" : "백"} 돌이 밖으로 나갔습니다.`;
+      emitSound("death", 1.35, { sync: false, throttleMs: 140 });
       changed = true;
     }
   });
 
   for (let i = 0; i < alive.length; i += 1) {
     for (let j = i + 1; j < alive.length; j += 1) {
-      changed = resolveCollision(alive[i], alive[j]) || changed;
+      const impact = resolveCollision(alive[i], alive[j]);
+      if (impact > 0) {
+        changed = true;
+        emitSound("collision", impact / 7, { sync: false, throttleMs: 70 });
+      }
     }
   }
 
@@ -736,7 +867,7 @@ function stepPhysics(dt) {
 
 function resolveCollision(a, b) {
   if (!a.alive || !b.alive) {
-    return false;
+    return 0;
   }
 
   const dx = b.x - a.x;
@@ -745,11 +876,12 @@ function resolveCollision(a, b) {
   const minDistance = STONE_RADIUS * 2;
 
   if (distance <= 0 || distance >= minDistance) {
-    return false;
+    return 0;
   }
 
   const nx = dx / distance;
   const ny = dy / distance;
+  const relativeSpeed = Math.abs((a.vx - b.vx) * nx + (a.vy - b.vy) * ny);
   const overlap = (minDistance - distance) / 2;
   a.x -= nx * overlap;
   a.y -= ny * overlap;
@@ -768,7 +900,7 @@ function resolveCollision(a, b) {
   a.vy = ty * aTangent + ny * bNormal * restitution;
   b.vx = tx * bTangent + nx * aNormal * restitution;
   b.vy = ty * bTangent + ny * aNormal * restitution;
-  return true;
+  return relativeSpeed;
 }
 
 function checkWinner() {
@@ -901,6 +1033,7 @@ function pointerUp(event) {
   state.shotActive = true;
   state.shotOwner = state.currentPlayer;
   state.message = "샷 진행 중입니다.";
+  emitSound("shoot", (strength / MAX_PULL) * 1.7, { sync: false });
   updateHud();
   syncState(true);
 }

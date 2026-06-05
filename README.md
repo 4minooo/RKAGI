@@ -13,7 +13,8 @@
 - 온라인 샷 처리 소유자 고정과 순차 저장으로 턴 전환 안정화
 - 실제 탈락 기준선 표시
 - 각자 동일한 수의 바둑알 선택: 3, 5, 7, 9개
-- 드래그 앤 릴리즈 방식의 샷
+- 드래그 앤 릴리즈 방식의 빠른 샷
+- 샷, 충돌, 탈락 효과음
 - 턴당 20초 제한 시간
 - 상대 돌을 모두 제거하면 승자 이름과 축하 메시지 표시
 - Firebase Realtime Database를 통한 온라인 방 동기화
@@ -53,7 +54,7 @@ Realtime Database 규칙은 `database.rules.json`에 들어 있습니다. Fireba
 ".write": "newData.exists() && $room.matches(/^[0-9]{6}$/)"
 ```
 
-온라인 턴 전환 안정화를 위해 `state.shotOwner` 필드도 허용해야 합니다. 최신 `database.rules.json`에는 이미 포함되어 있습니다.
+온라인 턴 전환과 효과음 동기화를 위해 `state.shotOwner`, `state.soundEvent` 필드도 허용해야 합니다. 최신 `database.rules.json`에는 이미 포함되어 있습니다.
 
 현재 앱은 Firebase Authentication 없이 방 코드를 공유하는 구조입니다. 친구와 가볍게 플레이하기에는 충분하지만, 공개 서비스로 키울 때는 익명 로그인이나 계정 로그인을 붙여 플레이어별 쓰기 권한까지 좁히는 것을 권장합니다.
 

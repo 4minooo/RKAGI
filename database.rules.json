@@ -42,6 +42,21 @@
           "shotOwner": {
             ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)"
           },
+          "soundEvent": {
+            ".validate": "newData.hasChildren(['id', 'type', 'strength'])",
+            "id": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "type": {
+              ".validate": "newData.isString() && (newData.val() === 'shoot' || newData.val() === 'collision' || newData.val() === 'death')"
+            },
+            "strength": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
           "gameOver": {
             ".validate": "newData.isBoolean()"
           },
@@ -68,10 +83,10 @@
                 ".validate": "newData.isNumber() && newData.val() >= -3 && newData.val() <= 21"
               },
               "vx": {
-                ".validate": "newData.isNumber() && newData.val() >= -35 && newData.val() <= 35"
+                ".validate": "newData.isNumber() && newData.val() >= -70 && newData.val() <= 70"
               },
               "vy": {
-                ".validate": "newData.isNumber() && newData.val() >= -35 && newData.val() <= 35"
+                ".validate": "newData.isNumber() && newData.val() >= -70 && newData.val() <= 70"
               },
               "alive": {
                 ".validate": "newData.isBoolean()"
