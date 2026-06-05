@@ -82,6 +82,7 @@ function createInitialState(count, players = [localName || "나", SOLO_OPPONENT]
     currentPlayer: 0,
     turnStartedAt: Date.now(),
     shotActive: false,
+    shotOwner: null,
     gameOver: false,
     winner: null,
     message: message || "자신의 돌을 뒤로 당겼다가 놓으세요.",
@@ -241,6 +242,20 @@ function canControlCurrentTurn() {
   return appMode !== "online" || firebaseBridge?.isLocalTurn(state.currentPlayer);
 }
 
+function activeShotOwner() {
+  return typeof state.shotOwner === "number" ? state.shotOwner : state.currentPlayer;
+}
+
+function ownsActiveShot() {
+  if (!state.shotActive) {
+    return false;
+  }
+  if (appMode !== "online") {
+    return true;
+  }
+  return firebaseBridge?.isLocalTurn(activeShotOwner());
+}
+
 function canStartNewGame() {
   return appMode === "solo" || (appMode === "online" && firebaseBridge?.playerSlot === 0);
 }
@@ -263,6 +278,7 @@ function applyRemoteState(remoteState) {
   cleaned.stones = normalizeStones(cleaned.stones);
   cleaned.winner = cleaned.winner ?? null;
   cleaned.shotActive = cleaned.shotActive === true;
+  cleaned.shotOwner = typeof cleaned.shotOwner === "number" ? cleaned.shotOwner : null;
   cleaned.gameOver = cleaned.gameOver === true;
   state = cleaned;
   drag = null;
@@ -415,6 +431,7 @@ function passTurn(reason = "턴이 넘어왔습니다.") {
   state.currentPlayer = 1 - state.currentPlayer;
   state.turnStartedAt = Date.now();
   state.shotActive = false;
+  state.shotOwner = null;
   state.message = reason;
   drag = null;
   updateHud();
@@ -428,6 +445,7 @@ function endTurnAfterMotion() {
   state.currentPlayer = 1 - state.currentPlayer;
   state.turnStartedAt = Date.now();
   state.shotActive = false;
+  state.shotOwner = null;
   state.message = "자신의 돌을 뒤로 당겼다가 놓으세요.";
   updateHud();
   syncState(true);
@@ -552,6 +570,27 @@ function drawBoard() {
     ctx.fillStyle = "rgba(48, 30, 14, 0.75)";
     ctx.fill();
   });
+
+  drawDeathLine();
+}
+
+function drawDeathLine() {
+  const topLeft = boardToCanvas({ x: -OUT_PADDING, y: -OUT_PADDING });
+  const bottomRight = boardToCanvas({ x: 18 + OUT_PADDING, y: 18 + OUT_PADDING });
+  const width = bottomRight.x - topLeft.x;
+  const height = bottomRight.y - topLeft.y;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(185, 69, 69, 0.95)";
+  ctx.lineWidth = Math.max(2, view.cell * 0.075);
+  ctx.setLineDash([view.cell * 0.32, view.cell * 0.18]);
+  ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(185, 69, 69, 0.94)";
+  ctx.font = `700 ${Math.max(11, view.cell * 0.28)}px sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.fillText("탈락선", topLeft.x + view.cell * 0.2, topLeft.y - view.cell * 0.28);
+  ctx.restore();
 }
 
 function drawAim() {
@@ -647,7 +686,7 @@ function stepPhysics(dt) {
   if (state.gameOver || !gameActive()) {
     return;
   }
-  if (appMode === "online" && !firebaseBridge?.isLocalTurn(state.currentPlayer)) {
+  if (appMode === "online" && state.shotActive && !ownsActiveShot()) {
     return;
   }
 
@@ -732,7 +771,7 @@ function checkWinner() {
   if (state.gameOver || !gameActive()) {
     return;
   }
-  if (appMode === "online" && !firebaseBridge?.isLocalTurn(state.currentPlayer)) {
+  if (appMode === "online" && state.shotActive && !ownsActiveShot()) {
     return;
   }
 
@@ -771,7 +810,7 @@ function frame(now) {
     motionSettledAt = null;
   } else if (motionSettledAt === null) {
     motionSettledAt = now;
-  } else if (!state.gameOver && state.shotActive && now - motionSettledAt > 430) {
+  } else if (!state.gameOver && state.shotActive && ownsActiveShot() && now - motionSettledAt > 430) {
     motionSettledAt = null;
     endTurnAfterMotion();
   }
@@ -856,6 +895,7 @@ function pointerUp(event) {
   drag.stone.vy = dy * SHOT_POWER;
   drag = null;
   state.shotActive = true;
+  state.shotOwner = state.currentPlayer;
   state.message = "샷 진행 중입니다.";
   updateHud();
   syncState(true);

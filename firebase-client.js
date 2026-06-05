@@ -140,6 +140,7 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
       currentPlayer: 0,
       turnStartedAt: Date.now(),
       shotActive: false,
+      shotOwner: null,
       gameOver: false,
       winner: null,
       message: "온라인 대전 시작! 흑 차례입니다.",
@@ -168,7 +169,11 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
     }
 
     lastPublish = now;
-    dbModule.set(stateRef(roomCode), { ...getState(), updatedBy: CLIENT_ID, updatedAt: now });
+    dbModule
+      .set(stateRef(roomCode), { ...getState(), updatedBy: CLIENT_ID, updatedAt: now })
+      .catch((error) => {
+        setStatus(`Firebase 저장 실패 · 규칙 게시를 확인하세요. (${error.message})`);
+      });
   }
 
   return {

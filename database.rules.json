@@ -39,6 +39,9 @@
           "shotActive": {
             ".validate": "newData.isBoolean()"
           },
+          "shotOwner": {
+            ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)"
+          },
           "gameOver": {
             ".validate": "newData.isBoolean()"
           },
