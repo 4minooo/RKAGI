@@ -1,0 +1,1 @@
+window.ALKKAGI_FIREBASE_CONFIG = null;

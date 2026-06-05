@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>알까기 대전</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="game-stage" aria-label="알까기 게임판">
+        <div class="board-wrap">
+          <canvas id="gameCanvas" aria-label="바둑판 알까기 게임"></canvas>
+          <div id="winnerOverlay" class="winner-overlay hidden" role="dialog" aria-modal="true">
+            <div class="winner-panel">
+              <p class="eyebrow">경기 종료</p>
+              <h1 id="winnerTitle">승리!</h1>
+              <p id="winnerMessage">멋진 승부였습니다.</p>
+              <button id="playAgainButton" class="primary-button" type="button">다시 경기</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side-panel" aria-label="게임 정보와 설정">
+        <header class="title-block">
+          <p class="eyebrow">바둑판 알까기</p>
+          <h1>알까기 대전</h1>
+        </header>
+
+        <section class="turn-card" aria-label="현재 턴">
+          <div class="turn-heading">
+            <span id="currentPlayerBadge" class="player-badge player-one">흑</span>
+            <div>
+              <p class="label">현재 차례</p>
+              <strong id="currentPlayerName">플레이어 1</strong>
+            </div>
+          </div>
+          <div class="timer-row">
+            <div class="timer-text">
+              <span id="timerText">20.0</span>
+              <small>초</small>
+            </div>
+            <div class="timer-track" aria-hidden="true">
+              <span id="timerBar"></span>
+            </div>
+          </div>
+          <p id="statusText" class="status-text">자신의 돌을 뒤로 당겼다가 놓으세요.</p>
+        </section>
+
+        <section class="score-grid" aria-label="남은 바둑알">
+          <div class="score-card">
+            <span class="stone-dot black"></span>
+            <div>
+              <label for="playerOneName">흑 이름</label>
+              <input id="playerOneName" type="text" value="플레이어 1" maxlength="12" />
+            </div>
+            <strong id="playerOneCount">5</strong>
+          </div>
+          <div class="score-card">
+            <span class="stone-dot white"></span>
+            <div>
+              <label for="playerTwoName">백 이름</label>
+              <input id="playerTwoName" type="text" value="플레이어 2" maxlength="12" />
+            </div>
+            <strong id="playerTwoCount">5</strong>
+          </div>
+        </section>
+
+        <section class="control-card" aria-label="경기 설정">
+          <label for="stoneCount">각자 바둑알 수</label>
+          <select id="stoneCount">
+            <option value="3">3개</option>
+            <option value="5" selected>5개</option>
+            <option value="7">7개</option>
+            <option value="9">9개</option>
+          </select>
+          <div class="button-row">
+            <button id="newGameButton" class="primary-button" type="button">새 경기</button>
+            <button id="passButton" class="secondary-button" type="button">턴 넘기기</button>
+          </div>
+        </section>
+
+        <section class="online-card" aria-label="Firebase 온라인 방">
+          <div>
+            <p class="label">Firebase 방</p>
+            <p id="onlineStatus" class="status-text">Firebase 설정을 넣으면 온라인 방을 사용할 수 있습니다.</p>
+          </div>
+          <input id="roomCodeInput" type="text" placeholder="방 코드" maxlength="8" />
+          <div class="button-row">
+            <button id="createRoomButton" class="secondary-button" type="button">방 만들기</button>
+            <button id="joinRoomButton" class="secondary-button" type="button">입장</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="./firebase-config.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
