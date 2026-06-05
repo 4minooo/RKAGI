@@ -80,7 +80,7 @@ function createInitialState(count, players = [localName || "나", SOLO_OPPONENT]
   return {
     players: normalizePlayers(players),
     currentPlayer: 0,
-    turnStartedAt: Date.now(),
+    turnStartedAt: gameNow(),
     shotActive: false,
     shotOwner: null,
     gameOver: false,
@@ -240,6 +240,10 @@ function canControlCurrentTurn() {
   }
 
   return appMode !== "online" || firebaseBridge?.isLocalTurn(state.currentPlayer);
+}
+
+function gameNow() {
+  return appMode === "online" && firebaseBridge?.now ? firebaseBridge.now() : Date.now();
 }
 
 function activeShotOwner() {
@@ -429,7 +433,7 @@ function passTurn(reason = "턴이 넘어왔습니다.") {
     return;
   }
   state.currentPlayer = 1 - state.currentPlayer;
-  state.turnStartedAt = Date.now();
+  state.turnStartedAt = gameNow();
   state.shotActive = false;
   state.shotOwner = null;
   state.message = reason;
@@ -443,7 +447,7 @@ function endTurnAfterMotion() {
     return;
   }
   state.currentPlayer = 1 - state.currentPlayer;
-  state.turnStartedAt = Date.now();
+  state.turnStartedAt = gameNow();
   state.shotActive = false;
   state.shotOwner = null;
   state.message = "자신의 돌을 뒤로 당겼다가 놓으세요.";
@@ -510,7 +514,7 @@ function updateTimer() {
     return;
   }
 
-  const elapsed = Date.now() - state.turnStartedAt;
+  const elapsed = gameNow() - state.turnStartedAt;
   const remaining = Math.max(0, MAX_TURN_MS - elapsed);
   const ratio = remaining / MAX_TURN_MS;
   els.timerText.textContent = (remaining / 1000).toFixed(1);

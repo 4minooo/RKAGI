@@ -42,6 +42,7 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
       leaveRoom: () => {},
       publish: () => {},
       isLocalTurn: () => true,
+      now: () => Date.now(),
     };
   }
 
@@ -54,9 +55,17 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
   let playerSlot = null;
   let unsubscribe = null;
   let lastPublish = 0;
+  let serverTimeOffset = 0;
+  let isWriting = false;
+  let pendingPayload = null;
 
   const roomRef = (code) => dbModule.ref(db, `${ROOM_PATH}/${code}`);
   const stateRef = (code) => dbModule.ref(db, `${ROOM_PATH}/${code}/state`);
+  const serverNow = () => Date.now() + serverTimeOffset;
+
+  dbModule.onValue(dbModule.ref(db, ".info/serverTimeOffset"), (snapshot) => {
+    serverTimeOffset = Number(snapshot.val()) || 0;
+  });
 
   function listen(code) {
     if (unsubscribe) {
@@ -80,6 +89,7 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
     roomCode = "";
     playerSlot = null;
     lastPublish = 0;
+    pendingPayload = null;
   }
 
   async function createRoom() {
@@ -96,7 +106,7 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
 
     roomCode = nextRoomCode;
     playerSlot = 0;
-    const state = { ...getState(), updatedBy: CLIENT_ID, updatedAt: Date.now() };
+    const state = { ...getState(), turnStartedAt: serverNow(), updatedBy: CLIENT_ID, updatedAt: serverNow() };
     await dbModule.set(roomRef(roomCode), {
       createdAt: dbModule.serverTimestamp(),
       players: { black: CLIENT_ID },
@@ -138,14 +148,14 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
       players,
       stones: normalizeStones(remoteState.stones),
       currentPlayer: 0,
-      turnStartedAt: Date.now(),
+      turnStartedAt: serverNow(),
       shotActive: false,
       shotOwner: null,
       gameOver: false,
       winner: null,
       message: "온라인 대전 시작! 흑 차례입니다.",
       updatedBy: CLIENT_ID,
-      updatedAt: Date.now(),
+      updatedAt: serverNow(),
     };
 
     await dbModule.update(dbModule.ref(db, `${ROOM_PATH}/${roomCode}/players`), {
@@ -163,16 +173,33 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
       return;
     }
 
-    const now = Date.now();
+    const now = serverNow();
     if (!force && now - lastPublish < 90) {
       return;
     }
 
     lastPublish = now;
+    pendingPayload = { ...getState(), updatedBy: CLIENT_ID, updatedAt: now };
+    flushLatestState();
+  }
+
+  function flushLatestState() {
+    if (isWriting || !pendingPayload || !roomCode) {
+      return;
+    }
+
+    const payload = pendingPayload;
+    pendingPayload = null;
+    isWriting = true;
+
     dbModule
-      .set(stateRef(roomCode), { ...getState(), updatedBy: CLIENT_ID, updatedAt: now })
+      .set(stateRef(roomCode), payload)
       .catch((error) => {
         setStatus(`Firebase 저장 실패 · 규칙 게시를 확인하세요. (${error.message})`);
+      })
+      .finally(() => {
+        isWriting = false;
+        flushLatestState();
       });
   }
 
@@ -189,5 +216,6 @@ export async function createFirebaseBridge({ onRemoteState, getState, setStatus 
     leaveRoom,
     publish,
     isLocalTurn: (currentPlayer) => playerSlot === null || playerSlot === currentPlayer,
+    now: serverNow,
   };
 }
