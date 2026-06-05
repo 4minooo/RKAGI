@@ -38,20 +38,9 @@ window.ALKKAGI_FIREBASE_CONFIG = {
 };
 ```
 
-개발 중 빠르게 테스트할 수 있는 Realtime Database 규칙 예시는 아래와 같습니다. 실제 공개 서비스에서는 인증과 방별 권한을 더 좁혀 주세요.
+Realtime Database 규칙은 `database.rules.json`에 들어 있습니다. Firebase Console의 Realtime Database > 규칙 탭에 그대로 붙여넣으면 됩니다.
 
-```json
-{
-  "rules": {
-    "alkkagiRooms": {
-      "$room": {
-        ".read": true,
-        ".write": true
-      }
-    }
-  }
-}
-```
+현재 앱은 Firebase Authentication 없이 방 코드를 공유하는 구조입니다. 그래서 규칙은 루트 경로를 닫고 `alkkagiRooms/{방코드}`만 열어두되, 방 코드와 게임 상태 데이터 모양을 검증합니다. 공개 서비스로 키울 때는 익명 로그인이나 계정 로그인을 붙여 플레이어별 쓰기 권한까지 좁히는 것을 권장합니다.
 
 ## Vercel 배포
 

@@ -1,0 +1,97 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "alkkagiRooms": {
+      "$room": {
+        ".read": "$room.matches(/^[A-Z0-9]{6}$/)",
+        ".write": "newData.exists() && $room.matches(/^[A-Z0-9]{6}$/)",
+        ".validate": "newData.hasChildren(['createdAt', 'players', 'state'])",
+        "createdAt": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 10000"
+        },
+        "players": {
+          ".validate": "newData.hasChild('black')",
+          "black": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+          },
+          "white": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "state": {
+          ".validate": "newData.hasChildren(['players', 'currentPlayer', 'turnStartedAt', 'shotActive', 'gameOver', 'message', 'stones'])",
+          "players": {
+            ".validate": "newData.hasChildren(['0', '1'])",
+            "$slot": {
+              ".validate": "$slot.matches(/^[01]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 12"
+            }
+          },
+          "currentPlayer": {
+            ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)"
+          },
+          "turnStartedAt": {
+            ".validate": "newData.isNumber() && newData.val() >= now - 86400000 && newData.val() <= now + 60000"
+          },
+          "shotActive": {
+            ".validate": "newData.isBoolean()"
+          },
+          "gameOver": {
+            ".validate": "newData.isBoolean()"
+          },
+          "winner": {
+            ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)"
+          },
+          "message": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"
+          },
+          "stones": {
+            ".validate": "newData.hasChildren()",
+            "$stone": {
+              ".validate": "$stone.matches(/^(0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17)$/) && newData.hasChildren(['id', 'owner', 'x', 'y', 'vx', 'vy', 'alive'])",
+              "id": {
+                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24"
+              },
+              "owner": {
+                ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)"
+              },
+              "x": {
+                ".validate": "newData.isNumber() && newData.val() >= -3 && newData.val() <= 21"
+              },
+              "y": {
+                ".validate": "newData.isNumber() && newData.val() >= -3 && newData.val() <= 21"
+              },
+              "vx": {
+                ".validate": "newData.isNumber() && newData.val() >= -35 && newData.val() <= 35"
+              },
+              "vy": {
+                ".validate": "newData.isNumber() && newData.val() >= -35 && newData.val() <= 35"
+              },
+              "alive": {
+                ".validate": "newData.isBoolean()"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "updatedBy": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber() && newData.val() >= now - 86400000 && newData.val() <= now + 60000"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
